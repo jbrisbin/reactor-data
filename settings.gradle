@@ -1,0 +1,4 @@
+rootProject.name = 'reactor-data'
+
+include 'data-core',
+		'data-spring'
