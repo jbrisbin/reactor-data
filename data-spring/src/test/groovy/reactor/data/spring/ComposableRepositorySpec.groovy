@@ -51,7 +51,7 @@ class ComposableRepositorySpec extends Specification {
 		when: "an entity is requested"
 		entity = people.findOne(1)
 
-		then: "it should be null"
+		then: "it should have a name"
 		entity.await(1, TimeUnit.SECONDS)?.name == "John Doe"
 
 	}

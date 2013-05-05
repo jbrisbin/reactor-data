@@ -2,18 +2,14 @@ package reactor.data.spring;
 
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeansException;
-import org.springframework.beans.factory.*;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.data.repository.CrudRepository;
-import org.springframework.data.repository.core.RepositoryInformation;
 import org.springframework.data.repository.support.Repositories;
-import org.springframework.util.Assert;
-import reactor.core.dynamic.reflect.MethodArgumentResolver;
-import reactor.core.dynamic.reflect.MethodSelectorResolver;
 
 import java.io.Serializable;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.util.List;
 
 import static org.springframework.core.GenericTypeResolver.resolveTypeArguments;
 
@@ -22,17 +18,14 @@ import static org.springframework.core.GenericTypeResolver.resolveTypeArguments;
  */
 public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<T, ID>, T, ID extends Serializable>
 		implements FactoryBean<R>,
-							 BeanFactoryAware,
-							 InitializingBean {
+							 BeanFactoryAware {
 
-	private final Class<R>                        repositoryType;
-	private       Class<? extends T>              domainType;
-	private       ListableBeanFactory             beanFactory;
-	private       Repositories                    repositories;
-	private       List<MethodSelectorResolver>    methodSelectorResolvers;
-	private       List<MethodArgumentResolver<?>> methodArgumentResolvers;
-	private       CrudRepository<T, ID>           delegateRepository;
-	private       R                               composableRepository;
+	private final Class<R>              repositoryType;
+	private       Class<? extends T>    domainType;
+	private       ListableBeanFactory   beanFactory;
+	private       Repositories          repositories;
+	private       CrudRepository<T, ID> delegateRepository;
+	private       R                     composableRepository;
 
 	@SuppressWarnings("unchecked")
 	public ComposableRepositoryFactoryBean(Class<R> repositoryType) {
@@ -45,26 +38,6 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 			this.domainType = (Class<? extends T>) types[0];
 			break;
 		}
-	}
-
-	public List<MethodSelectorResolver> getMethodSelectorResolvers() {
-		return methodSelectorResolvers;
-	}
-
-	public ComposableRepositoryFactoryBean<R, T, ID> setMethodSelectorResolvers(List<MethodSelectorResolver> methodSelectorResolvers) {
-		Assert.notEmpty(methodSelectorResolvers, "MethodSelectorResolvers cannot be empty");
-		this.methodSelectorResolvers = methodSelectorResolvers;
-		return this;
-	}
-
-	public List<MethodArgumentResolver<?>> getMethodArgumentResolvers() {
-		return methodArgumentResolvers;
-	}
-
-	public ComposableRepositoryFactoryBean<R, T, ID> setMethodArgumentResolvers(List<MethodArgumentResolver<?>> methodArgumentResolvers) {
-		Assert.notEmpty(methodArgumentResolvers, "MethodArgumentResolvers cannot be empty");
-		this.methodArgumentResolvers = methodArgumentResolvers;
-		return this;
 	}
 
 	@Override
@@ -83,12 +56,6 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
-	public void afterPropertiesSet() throws Exception {
-
-	}
-
-	@Override
 	public R getObject() throws Exception {
 		return composableRepository;
 	}
@@ -101,20 +68,6 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 	@Override
 	public boolean isSingleton() {
 		return true;
-	}
-
-	private static class ComposableRepositoryInvocationHandler implements InvocationHandler {
-		final RepositoryInformation repoInfo;
-
-		private ComposableRepositoryInvocationHandler(RepositoryInformation repoInfo) {
-			this.repoInfo = repoInfo;
-		}
-
-		@Override
-		public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-
-			return null;
-		}
 	}
 
 }

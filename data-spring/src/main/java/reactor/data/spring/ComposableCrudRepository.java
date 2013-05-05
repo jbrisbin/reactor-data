@@ -64,7 +64,7 @@ public interface ComposableCrudRepository<T, ID extends Serializable> extends Co
 	 * @param id must not be {@literal null}.
 	 * @throws IllegalArgumentException in case the given {@code id} is {@literal null}
 	 */
-	void delete(ID id);
+	Composable<Void> delete(ID id);
 
 	/**
 	 * Deletes the given entities.
@@ -72,11 +72,11 @@ public interface ComposableCrudRepository<T, ID extends Serializable> extends Co
 	 * @param entities
 	 * @throws IllegalArgumentException in case the given {@link Iterable} is (@literal null}.
 	 */
-	void delete(Composable<? extends T> entities);
+	Composable<Void> delete(Composable<? extends T> entities);
 
 	/**
 	 * Deletes all entities managed by the repository.
 	 */
-	void deleteAll();
+	Composable<Void> deleteAll();
 
 }
