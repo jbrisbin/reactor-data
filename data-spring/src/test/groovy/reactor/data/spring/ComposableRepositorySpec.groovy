@@ -10,6 +10,7 @@ import reactor.core.Composable
 import reactor.data.spring.config.EnableComposableRepositories
 import reactor.data.spring.test.ComposablePersonRepository
 import reactor.data.spring.test.Person
+import reactor.fn.Function
 import spock.lang.Specification
 
 import java.util.concurrent.TimeUnit
@@ -50,8 +51,20 @@ class ComposableRepositorySpec extends Specification {
 
 		when: "an entity is requested"
 		entity = people.findOne(1)
+		people.findOne(1).map(new Function<Person, Integer>() {
+			@Override
+			Integer apply(Person p) {
+				return count
+			}
+		})
 
-		then: "it should have a name"
+		then: "entity should have a name property"
+		entity.await(1, TimeUnit.SECONDS)?.name == "John Doe"
+
+		when: "a finder method is called"
+		entity = people.findByName("John Doe")
+
+		then: "entity should have a name property"
 		entity.await(1, TimeUnit.SECONDS)?.name == "John Doe"
 
 	}
