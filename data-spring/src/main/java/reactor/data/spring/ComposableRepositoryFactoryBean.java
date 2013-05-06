@@ -65,14 +65,7 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 			proxyFactory.addInterface(repositoryType);
 			proxyFactory.addInterface(ComposableRepository.class);
 
-			proxyFactory.addAdvice(
-					new QueryMethodExecutor<R, T, ID>(
-							repoInfo,
-							repositoryType,
-							repo,
-							delegateRepository
-					)
-			);
+			proxyFactory.addAdvice(new QueryMethodExecutor<R, T, ID>(repositoryType, delegateRepository));
 
 			composableRepository = (R) proxyFactory.getProxy();
 		}
@@ -94,21 +87,12 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 	}
 
 	private static class QueryMethodExecutor<R extends ComposableCrudRepository<T, ID>, T, ID extends Serializable> implements MethodInterceptor {
-		private final Map<String, Method>     methods      = new HashMap<String, Method>();
+		private final Map<String, Method>     crudMethods  = new HashMap<String, Method>();
 		private final Map<String, Method>     queryMethods = new HashMap<String, Method>();
 		private final Map<String, Class<?>[]> paramTypes   = new HashMap<String, Class<?>[]>();
-		private final Class<R>                        composableRepositoryType;
-		private final ComposableCrudRepository<T, ID> composableRepository;
-		private final CrudRepository<T, ID>           delegateRepository;
-		private final RepositoryInformation           repoInfo;
+		private final CrudRepository<T, ID> delegateRepository;
 
-		private QueryMethodExecutor(final RepositoryInformation repoInfo,
-																Class<R> composableRepositoryType,
-																ComposableCrudRepository<T, ID> composableRepository,
-																CrudRepository<T, ID> delegateRepository) {
-			this.repoInfo = repoInfo;
-			this.composableRepositoryType = composableRepositoryType;
-			this.composableRepository = composableRepository;
+		private QueryMethodExecutor(Class<R> composableRepositoryType, CrudRepository<T, ID> delegateRepository) {
 			this.delegateRepository = delegateRepository;
 
 			doWithMethods(
@@ -137,39 +121,35 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 			Class<?>[] paramTypes = this.paramTypes.get(name);
 
 			try {
-				Method m = methods.get(name);
-				if (null == m) {
-					m = invocation.getThis().getClass().getDeclaredMethod(invocation.getMethod().getName(), paramTypes);
-					if (null != m) {
-						methods.put(name, m);
+				Method m;
+				if (null == (m = crudMethods.get(name))) {
+					if (null != (m = invocation.getThis().getClass().getDeclaredMethod(invocation.getMethod().getName(), paramTypes))) {
+						crudMethods.put(name, m);
 					}
 				}
-
-				if (null == m) {
-					throw new NoSuchMethodError(name);
+				if (null != m) {
+					return m.invoke(invocation.getThis(), invocation.getArguments());
 				}
-
-				System.out.println("method: " + m);
-				System.out.println("param: " + paramTypes.length);
-
-				return m.invoke(invocation.getThis(), invocation.getArguments());
 			} catch (Exception e) {
 				if (NoSuchMethodException.class.isAssignableFrom(e.getClass())) {
 					// this is probably a finder method
-					Method m = queryMethods.get(name);
-					if (null == m) {
-						m = delegateRepository.getClass().getDeclaredMethod(invocation.getMethod().getName(), paramTypes);
-						if (null != m) {
-							Object result = m.invoke(delegateRepository, invocation.getArguments());
-							if (result instanceof Iterable) {
-								return Composable.from((Iterable) result);
-							} else {
-								return Composable.from(result);
-							}
+					Method m;
+					if (null == (m = queryMethods.get(name))) {
+						if (null != (m = delegateRepository.getClass().getDeclaredMethod(invocation.getMethod().getName(), paramTypes))) {
+							queryMethods.put(name, m);
 						}
-						queryMethods.put(name, m);
+					}
+					if (null != m) {
+						Object result = m.invoke(delegateRepository, invocation.getArguments());
+						if (result instanceof Iterable) {
+							return Composable.from((Iterable) result);
+						} else {
+							return Composable.from(result);
+						}
 					}
 				}
+
+				throw e;
 			}
 
 			throw new NoSuchMethodException(name);

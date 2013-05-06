@@ -51,15 +51,12 @@ class ComposableRepositorySpec extends Specification {
 
 		when: "an entity is requested"
 		entity = people.findOne(1)
-		people.findOne(1).map(new Function<Person, Integer>() {
-			@Override
-			Integer apply(Person p) {
-				return count
-			}
-		})
+		def name = entity.map({ Person p ->
+			p.name
+		} as Function<Person, String>)
 
 		then: "entity should have a name property"
-		entity.await(1, TimeUnit.SECONDS)?.name == "John Doe"
+		name.await(1, TimeUnit.SECONDS) == "John Doe"
 
 		when: "a finder method is called"
 		entity = people.findByName("John Doe")
