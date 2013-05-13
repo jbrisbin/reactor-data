@@ -2,8 +2,8 @@ package reactor.data.spring;
 
 import org.springframework.data.repository.CrudRepository;
 import reactor.core.Composable;
+import reactor.core.R;
 import reactor.core.Reactor;
-import reactor.core.Rx;
 import reactor.fn.Consumer;
 import reactor.fn.Function;
 
@@ -69,7 +69,7 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 				}
 			}
 		};
-		Rx.schedule(consumer, null, reactor);
+		R.schedule(consumer, null, reactor);
 		return c;
 	}
 
@@ -94,7 +94,7 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 				c.accept(delegateRepository.count());
 			}
 		};
-		Rx.schedule(consumer, null, reactor);
+		R.schedule(consumer, null, reactor);
 		return c;
 	}
 
@@ -112,7 +112,7 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({"unchecked", "rawtypes"})
 	public Composable<Void> delete(Composable<? extends T> entities) {
 		final Composable<Void> c = new Composable<Void>(reactor);
 		entities.consume(new Consumer() {
@@ -135,7 +135,7 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 				c.accept((Void) null);
 			}
 		};
-		Rx.schedule(consumer, null, reactor);
+		R.schedule(consumer, null, reactor);
 		return c;
 	}
 

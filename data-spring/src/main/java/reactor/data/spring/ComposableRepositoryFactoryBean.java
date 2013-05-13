@@ -8,7 +8,6 @@ import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.data.repository.CrudRepository;
-import org.springframework.data.repository.core.RepositoryInformation;
 import org.springframework.data.repository.support.Repositories;
 import org.springframework.util.ReflectionUtils;
 import reactor.core.Composable;
@@ -57,8 +56,6 @@ public class ComposableRepositoryFactoryBean<R extends ComposableCrudRepository<
 		this.beanFactory = event.getApplicationContext();
 		repositories = new Repositories(this.beanFactory);
 		if (null != (delegateRepository = repositories.getRepositoryFor(domainType))) {
-			RepositoryInformation repoInfo = repositories.getRepositoryInformationFor(domainType);
-
 			SimpleComposableCrudRepository<T, ID> repo = new SimpleComposableCrudRepository<T, ID>(delegateRepository);
 
 			ProxyFactory proxyFactory = new ProxyFactory(repo);
