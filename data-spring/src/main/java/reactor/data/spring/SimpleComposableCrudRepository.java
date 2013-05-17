@@ -36,20 +36,20 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 
 	@Override
 	public Composable<T> findOne(ID id) {
-		return Composable.from(id)
-										 .setDispatcher(reactor.getDispatcher())
-										 .map(new Function<ID, T>() {
-											 @Override
-											 public T apply(ID id) {
-												 return delegateRepository.findOne(id);
-											 }
-										 });
+		return new Composable<ID>(reactor.getDispatcher())
+				.map(new Function<ID, T>() {
+					@Override
+					public T apply(ID id) {
+						return delegateRepository.findOne(id);
+					}
+				});
 	}
 
 	@Override
 	public Composable<Boolean> exists(ID id) {
 		return Composable.from(id)
-										 .setDispatcher(reactor.getDispatcher())
+										 .using(reactor)
+										 .build()
 										 .map(new Function<ID, Boolean>() {
 											 @Override
 											 public Boolean apply(ID id) {
@@ -101,7 +101,8 @@ class SimpleComposableCrudRepository<T, ID extends Serializable> implements Comp
 	@Override
 	public Composable<Void> delete(ID id) {
 		return Composable.from(id)
-										 .setDispatcher(reactor.getDispatcher())
+										 .using(reactor)
+										 .build()
 										 .map(new Function<ID, Void>() {
 											 @Override
 											 public Void apply(ID id) {
