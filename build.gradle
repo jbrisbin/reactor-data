@@ -62,8 +62,8 @@ subprojects { subproject ->
 	apply plugin: 'java'
 	apply plugin: 'groovy'
 
-	sourceCompatibility = 7
-	targetCompatibility = 7
+	sourceCompatibility = 8
+	targetCompatibility = 8
 
 	[compileJava, compileTestJava]*.options*.compilerArgs = ["-Xlint:none", "-g"]
 
