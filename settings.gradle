@@ -1,4 +1,5 @@
 rootProject.name = 'reactor-data'
 
 include 'data-core',
-		'data-spring'
+		'data-spring',
+    'data-riak'

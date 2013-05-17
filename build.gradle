@@ -31,6 +31,9 @@ ext {
   sdCommonsVersion = "1.6.0.BUILD-SNAPSHOT"
   sdMongoVersion = "1.3.0.BUILD-SNAPSHOT"
   
+  // Riak
+  riakClientVersion = '1.1.0'
+  
 	// Testing
 	spockVersion = '0.7-groovy-2.0'
 }
@@ -140,5 +143,15 @@ project('data-spring') {
     // Testing
     testRuntime "org.slf4j:jcl-over-slf4j:$slf4jVersion"
 	}
+}
+
+project('data-riak') {
+  description = 'Reactor components for working with Riak'
+  dependencies {
+    compile project(':data-core')
+    
+    // Riak
+    compile "com.basho.riak:riak-client:$riakClientVersion"
+  }
 }
 
