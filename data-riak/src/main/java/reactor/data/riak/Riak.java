@@ -26,11 +26,14 @@ import reactor.fn.Registry;
 import reactor.fn.Tuple;
 import reactor.fn.dispatch.Dispatcher;
 import reactor.fn.dispatch.RingBufferDispatcher;
+import reactor.fn.dispatch.ThreadPoolExecutorDispatcher;
 
 import java.util.Collection;
 import java.util.Iterator;
 
 import static reactor.core.Context.nextWorkerDispatcher;
+import static reactor.core.Context.synchronousDispatcher;
+import static reactor.core.Context.threadPoolDispatcher;
 
 /**
  * Instances of this class manage the execution of {@link RiakOperation RiakOperations} so that the user doesn't
@@ -54,6 +57,7 @@ public class Riak {
 	public Riak(IRiakClient riakClient, Dispatcher customDispatcher) {
 		this.riakClient = riakClient;
 		this.reactor = new Reactor(customDispatcher);
+//		this.ioReactor =new Reactor(threadPoolDispatcher());
 		this.ioReactor = new Reactor(new RingBufferDispatcher(
 				"riak",
 				1,
@@ -64,7 +68,7 @@ public class Riak {
 	}
 
 	public Promise<Void> send(RiakOperation<?>... ops) {
-		Promise<Void> p = new Promise<>(reactor);
+		Promise<Void> p = new Promise<>(synchronousDispatcher());
 
 		R.schedule(
 				(Void v) -> {
@@ -86,7 +90,7 @@ public class Riak {
 	}
 
 	public <T, O extends RiakOperation<T>> Promise<T> send(O op) {
-		Promise<T> p = new Promise<>(reactor);
+		Promise<T> p = new Promise<>(synchronousDispatcher());
 
 		R.schedule(
 				(Void v) -> {
@@ -108,7 +112,7 @@ public class Riak {
 	}
 
 	public Promise<Bucket> fetchBucket(String name) {
-		Promise<Bucket> p = new Promise<>(reactor);
+		Promise<Bucket> p = new Promise<>(synchronousDispatcher());
 
 		Iterator<Registration<? extends Bucket>> buckets = bucketRegistry.select(name).iterator();
 		if (!buckets.hasNext()) {
@@ -141,7 +145,7 @@ public class Riak {
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter,
 															Mutation<T> mutation) {
-		Promise<T> p = new Promise<>(reactor);
+		Promise<T> p = new Promise<>(synchronousDispatcher());
 
 		R.schedule(
 				(Void v) -> {
@@ -188,7 +192,7 @@ public class Riak {
 															Class<T> asType,
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter) {
-		Promise<T> p = new Promise<>(reactor.getDispatcher());
+		Promise<T> p = new Promise<>(synchronousDispatcher());
 
 		R.schedule(
 				(Void v) -> {
@@ -223,7 +227,7 @@ public class Riak {
 	public Promise<Void> delete(Bucket bucket,
 															String key,
 															Retrier retrier) {
-		Promise<Void> p = new Promise<>(reactor.getDispatcher());
+		Promise<Void> p = new Promise<>(synchronousDispatcher());
 
 		R.schedule(
 				(Void v) -> {

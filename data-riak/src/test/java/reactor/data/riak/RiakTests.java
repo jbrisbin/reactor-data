@@ -95,7 +95,7 @@ public class RiakTests {
 		for (int i = 0; i < objCount; i++) {
 			ops[i] = test.delete("test" + i);
 		}
-		riak.send(ops).await();
+		//riak.send(ops).await();
 		LOG.info("Done cleaning documents.", objCount);
 
 		CountDownLatch latch = new CountDownLatch((int) objCount);
