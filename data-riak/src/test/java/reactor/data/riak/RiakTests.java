@@ -2,7 +2,6 @@ package reactor.data.riak;
 
 import com.basho.riak.client.IRiakObject;
 import com.basho.riak.client.RiakException;
-import com.basho.riak.client.RiakFactory;
 import com.basho.riak.client.bucket.Bucket;
 import com.basho.riak.client.operations.DeleteObject;
 import org.junit.Before;
@@ -53,7 +52,7 @@ public class RiakTests {
 
 	@Before
 	public void setup() throws RiakException {
-		riak = new Riak(RiakFactory.pbcClient());
+		riak = new Riak();
 	}
 
 	@Test
@@ -95,7 +94,7 @@ public class RiakTests {
 		for (int i = 0; i < objCount; i++) {
 			ops[i] = test.delete("test" + i);
 		}
-		//riak.send(ops).await();
+		riak.send(ops);
 		LOG.info("Done cleaning documents.", objCount);
 
 		CountDownLatch latch = new CountDownLatch((int) objCount);

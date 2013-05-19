@@ -2,6 +2,7 @@ package reactor.data.riak;
 
 import com.basho.riak.client.IRiakClient;
 import com.basho.riak.client.RiakException;
+import com.basho.riak.client.RiakFactory;
 import com.basho.riak.client.RiakRetryFailedException;
 import com.basho.riak.client.bucket.Bucket;
 import com.basho.riak.client.cap.Mutation;
@@ -11,7 +12,7 @@ import com.basho.riak.client.operations.DeleteObject;
 import com.basho.riak.client.operations.FetchObject;
 import com.basho.riak.client.operations.RiakOperation;
 import com.basho.riak.client.operations.StoreObject;
-import com.lmax.disruptor.BlockingWaitStrategy;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.dsl.ProducerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,14 +27,11 @@ import reactor.fn.Registry;
 import reactor.fn.Tuple;
 import reactor.fn.dispatch.Dispatcher;
 import reactor.fn.dispatch.RingBufferDispatcher;
-import reactor.fn.dispatch.ThreadPoolExecutorDispatcher;
 
 import java.util.Collection;
 import java.util.Iterator;
 
-import static reactor.core.Context.nextWorkerDispatcher;
-import static reactor.core.Context.synchronousDispatcher;
-import static reactor.core.Context.threadPoolDispatcher;
+import static reactor.core.Context.rootDispatcher;
 
 /**
  * Instances of this class manage the execution of {@link RiakOperation RiakOperations} so that the user doesn't
@@ -47,28 +45,31 @@ public class Riak {
 	private final Logger           log            = LoggerFactory.getLogger(Riak.class);
 	private final Registry<Bucket> bucketRegistry = new CachingRegistry<>(null, null);
 	private final IRiakClient riakClient;
-	private final Reactor     reactor;
 	private final Reactor     ioReactor;
+	private final Reactor     reactor;
+
+	public Riak() throws RiakException {
+		this(RiakFactory.pbcClient());
+	}
 
 	public Riak(IRiakClient riakClient) {
-		this(riakClient, nextWorkerDispatcher());
+		this(riakClient, rootDispatcher());
 	}
 
 	public Riak(IRiakClient riakClient, Dispatcher customDispatcher) {
 		this.riakClient = riakClient;
 		this.reactor = new Reactor(customDispatcher);
-//		this.ioReactor =new Reactor(threadPoolDispatcher());
 		this.ioReactor = new Reactor(new RingBufferDispatcher(
 				"riak",
 				1,
 				1024,
 				ProducerType.MULTI,
-				new BlockingWaitStrategy()
+				new YieldingWaitStrategy()
 		));
 	}
 
 	public Promise<Void> send(RiakOperation<?>... ops) {
-		Promise<Void> p = new Promise<>(synchronousDispatcher());
+		Promise<Void> p = new Promise<>(reactor);
 
 		R.schedule(
 				(Void v) -> {
@@ -90,7 +91,7 @@ public class Riak {
 	}
 
 	public <T, O extends RiakOperation<T>> Promise<T> send(O op) {
-		Promise<T> p = new Promise<>(synchronousDispatcher());
+		Promise<T> p = new Promise<>(reactor);
 
 		R.schedule(
 				(Void v) -> {
@@ -112,7 +113,7 @@ public class Riak {
 	}
 
 	public Promise<Bucket> fetchBucket(String name) {
-		Promise<Bucket> p = new Promise<>(synchronousDispatcher());
+		Promise<Bucket> p = new Promise<>(reactor);
 
 		Iterator<Registration<? extends Bucket>> buckets = bucketRegistry.select(name).iterator();
 		if (!buckets.hasNext()) {
@@ -145,7 +146,7 @@ public class Riak {
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter,
 															Mutation<T> mutation) {
-		Promise<T> p = new Promise<>(synchronousDispatcher());
+		Promise<T> p = new Promise<>(reactor);
 
 		R.schedule(
 				(Void v) -> {
@@ -192,7 +193,7 @@ public class Riak {
 															Class<T> asType,
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter) {
-		Promise<T> p = new Promise<>(synchronousDispatcher());
+		Promise<T> p = new Promise<>(reactor);
 
 		R.schedule(
 				(Void v) -> {
@@ -227,7 +228,7 @@ public class Riak {
 	public Promise<Void> delete(Bucket bucket,
 															String key,
 															Retrier retrier) {
-		Promise<Void> p = new Promise<>(synchronousDispatcher());
+		Promise<Void> p = new Promise<>(reactor);
 
 		R.schedule(
 				(Void v) -> {
