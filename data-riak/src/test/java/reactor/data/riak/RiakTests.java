@@ -4,6 +4,7 @@ import com.basho.riak.client.IRiakObject;
 import com.basho.riak.client.RiakException;
 import com.basho.riak.client.bucket.Bucket;
 import com.basho.riak.client.operations.DeleteObject;
+import com.basho.riak.client.operations.StoreObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -22,7 +23,7 @@ import static org.hamcrest.Matchers.*;
 public class RiakTests {
 
 	static final Logger LOG      = LoggerFactory.getLogger(RiakTests.class);
-	static final long   objCount = 1000;
+	static final long   objCount = 5000;
 
 	long start;
 	long end;
@@ -89,27 +90,32 @@ public class RiakTests {
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	public void riakCanSupportLargeVolumesOfWrites() throws InterruptedException, RiakException {
 		Bucket test = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
-		LOG.info("Cleaning {} documents...", objCount);
-		DeleteObject[] ops = new DeleteObject[(int) objCount];
-		for (int i = 0; i < objCount; i++) {
-			ops[i] = test.delete("test" + i);
-		}
-		riak.send(ops);
-		LOG.info("Done cleaning documents.", objCount);
 
-		CountDownLatch latch = new CountDownLatch((int) objCount);
+		CountDownLatch latch = new CountDownLatch(2);
+
+		LOG.info("Cleaning {} documents...", objCount);
+		DeleteObject[] deleteOps = new DeleteObject[(int) objCount];
+		for (int i = 0; i < objCount; i++) {
+			deleteOps[i] = test.delete("test" + i);
+		}
+		riak.send(deleteOps).onSuccess(v -> latch.countDown());
+		LOG.info("Done cleaning documents.", objCount);
 
 		LOG.info("Starting timed store of {} documents...", objCount);
 		startTimer();
+		StoreObject[] storeOps = new StoreObject[(int) objCount];
 		for (int i = 0; i < objCount; i++) {
-			riak.store(test, "test" + i, "Hello World!", null, null, null).
-					onSuccess(data -> latch.countDown());
+			storeOps[i] = test.store("test" + i, "Hello World!");
 		}
 		endTimer("throughput for queue:");
 
+		riak.send(storeOps).onSuccess(v -> latch.countDown());
 		latch.await(30, TimeUnit.SECONDS);
 
 		endTimer("throughput for wait:");
+
+		String s = riak.fetch(test, "test" + (objCount - 1), String.class, null, null).await(1, TimeUnit.SECONDS);
+		assertThat("document was stored", s, is("Hello World!"));
 	}
 
 }

@@ -1,9 +1,6 @@
 package reactor.data.riak;
 
-import com.basho.riak.client.IRiakClient;
-import com.basho.riak.client.RiakException;
-import com.basho.riak.client.RiakFactory;
-import com.basho.riak.client.RiakRetryFailedException;
+import com.basho.riak.client.*;
 import com.basho.riak.client.bucket.Bucket;
 import com.basho.riak.client.cap.Mutation;
 import com.basho.riak.client.cap.Retrier;
@@ -12,8 +9,6 @@ import com.basho.riak.client.operations.DeleteObject;
 import com.basho.riak.client.operations.FetchObject;
 import com.basho.riak.client.operations.RiakOperation;
 import com.basho.riak.client.operations.StoreObject;
-import com.lmax.disruptor.YieldingWaitStrategy;
-import com.lmax.disruptor.dsl.ProducerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.CachingRegistry;
@@ -26,12 +21,12 @@ import reactor.fn.Registration;
 import reactor.fn.Registry;
 import reactor.fn.Tuple;
 import reactor.fn.dispatch.Dispatcher;
-import reactor.fn.dispatch.RingBufferDispatcher;
 
 import java.util.Collection;
 import java.util.Iterator;
 
 import static reactor.core.Context.rootDispatcher;
+import static reactor.core.Context.threadPoolDispatcher;
 
 /**
  * Instances of this class manage the execution of {@link RiakOperation RiakOperations} so that the user doesn't
@@ -59,13 +54,14 @@ public class Riak {
 	public Riak(IRiakClient riakClient, Dispatcher customDispatcher) {
 		this.riakClient = riakClient;
 		this.reactor = new Reactor(customDispatcher);
-		this.ioReactor = new Reactor(new RingBufferDispatcher(
-				"riak",
-				1,
-				1024,
-				ProducerType.MULTI,
-				new YieldingWaitStrategy()
-		));
+		this.ioReactor = new Reactor(threadPoolDispatcher());
+//		this.ioReactor = new Reactor(new RingBufferDispatcher(
+//				"riak",
+//				1,
+//				1024,
+//				ProducerType.MULTI,
+//				new YieldingWaitStrategy()
+//		));
 	}
 
 	public Promise<Void> send(RiakOperation<?>... ops) {
@@ -197,7 +193,12 @@ public class Riak {
 
 		R.schedule(
 				(Void v) -> {
-					FetchObject<T> op = (null == asType ? (FetchObject<T>) bucket.fetch(key) : bucket.fetch(key, asType));
+					FetchObject<T> op;
+					if (null == asType || String.class.equals(asType) || byte[].class.equals(asType)) {
+						op = (FetchObject<T>) bucket.fetch(key);
+					} else {
+						op = bucket.fetch(key, asType);
+					}
 					if (null != conflictResolver) {
 						op = op.withResolver(siblings -> {
 							T result = conflictResolver.apply(siblings);
@@ -214,7 +215,13 @@ public class Riak {
 						if (log.isTraceEnabled()) {
 							log.trace("/{}/{} fetched: {}", bucket.getName(), key, result);
 						}
-						p.set(result);
+						if (String.class == asType && IRiakObject.class.isInstance(result)) {
+							p.set((T) ((IRiakObject) result).getValueAsString());
+						} else if (String.class == asType && IRiakObject.class.isInstance(result)) {
+							p.set((T) ((IRiakObject) result).getValue());
+						} else {
+							p.set(result);
+						}
 					} catch (RiakRetryFailedException e) {
 						p.set(e);
 					}
