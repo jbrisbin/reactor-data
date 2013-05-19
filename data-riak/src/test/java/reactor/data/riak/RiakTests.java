@@ -4,10 +4,12 @@ import com.basho.riak.client.IRiakObject;
 import com.basho.riak.client.RiakException;
 import com.basho.riak.client.RiakFactory;
 import com.basho.riak.client.bucket.Bucket;
+import com.basho.riak.client.operations.DeleteObject;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Composable;
-import reactor.core.Promise;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +22,8 @@ import static org.hamcrest.Matchers.*;
  */
 public class RiakTests {
 
-	static final long objCount = 2000;
+	static final Logger LOG      = LoggerFactory.getLogger(RiakTests.class);
+	static final long   objCount = 1000;
 
 	long start;
 	long end;
@@ -38,7 +41,6 @@ public class RiakTests {
 	}
 
 	private void startTimer() {
-		System.out.println("starting timer...");
 		start = System.currentTimeMillis();
 	}
 
@@ -46,7 +48,7 @@ public class RiakTests {
 		end = System.currentTimeMillis();
 		elapsed = end - start;
 		throughput = Math.round((objCount / (elapsed * 1.0 / 1000)));
-		System.out.println(prefix + " " + throughput + "/s in " + elapsed + "ms");
+		LOG.info(prefix + " " + throughput + "/sec in " + elapsed + "ms");
 	}
 
 	@Before
@@ -68,14 +70,47 @@ public class RiakTests {
 
 	@Test
 	public void canSendOperationsToRiak() throws InterruptedException {
-		CountDownLatch latch = new CountDownLatch(1);
-
 		Bucket b = riak.fetchBucket("test").await();
 		assertThat("bucket was retrieved", b, is(notNullValue()));
 
-		IRiakObject iro  = riak.send(b.fetch("test")).await();
+		IRiakObject iro = riak.send(b.fetch("test")).await();
 		assertThat("object was retrieved", iro, is(notNullValue()));
+	}
 
+	@Test
+	public void canStoreData() throws InterruptedException {
+		Bucket b = riak.fetchBucket("test").await();
+		assertThat("bucket was retrieved", b, is(notNullValue()));
+
+		String s = riak.store(b, "test", "Hello World!", null, null, null).await();
+		LOG.info("store: " + s);
+	}
+
+	@Test
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	public void riakCanSupportLargeVolumesOfWrites() throws InterruptedException, RiakException {
+		Bucket test = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
+		LOG.info("Cleaning {} documents...", objCount);
+		DeleteObject[] ops = new DeleteObject[(int) objCount];
+		for (int i = 0; i < objCount; i++) {
+			ops[i] = test.delete("test" + i);
+		}
+		riak.send(ops).await();
+		LOG.info("Done cleaning documents.", objCount);
+
+		CountDownLatch latch = new CountDownLatch((int) objCount);
+
+		LOG.info("Starting timed store of {} documents...", objCount);
+		startTimer();
+		for (int i = 0; i < objCount; i++) {
+			riak.store(test, "test" + i, "Hello World!", null, null, null).
+					onSuccess(data -> latch.countDown());
+		}
+		endTimer("throughput for queue:");
+
+		latch.await(30, TimeUnit.SECONDS);
+
+		endTimer("throughput for wait:");
 	}
 
 }
