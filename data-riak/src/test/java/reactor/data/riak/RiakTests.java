@@ -10,12 +10,14 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Composable;
+import reactor.fn.Event;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static reactor.Fn.U;
 
 /**
  * @author Jon Brisbin
@@ -23,7 +25,7 @@ import static org.hamcrest.Matchers.*;
 public class RiakTests {
 
 	static final Logger LOG      = LoggerFactory.getLogger(RiakTests.class);
-	static final long   objCount = 5000;
+	static final long   objCount = 500;
 
 	long start;
 	long end;
@@ -70,20 +72,80 @@ public class RiakTests {
 
 	@Test
 	public void canSendOperationsToRiak() throws InterruptedException {
-		Bucket b = riak.fetchBucket("test").await();
+		Bucket b = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
 		assertThat("bucket was retrieved", b, is(notNullValue()));
 
-		IRiakObject iro = riak.send(b.fetch("test")).await();
+		IRiakObject iro = riak.send(b.fetch("test")).await(1, TimeUnit.SECONDS);
 		assertThat("object was retrieved", iro, is(notNullValue()));
 	}
 
 	@Test
 	public void canStoreData() throws InterruptedException {
-		Bucket b = riak.fetchBucket("test").await();
+		Bucket b = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
 		assertThat("bucket was retrieved", b, is(notNullValue()));
 
-		String s = riak.store(b, "test", "Hello World!", null, null, null).await();
+		String s = riak.store(b, "test", "Hello World!", null, null, null).await(1, TimeUnit.SECONDS);
 		LOG.info("store: " + s);
+	}
+
+	@SuppressWarnings({"rawtypes", "unchecked"})
+	@Test
+	public void canRespondToEvents() throws InterruptedException {
+		Bucket b = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
+		assertThat("bucket was retrieved", b, is(notNullValue()));
+
+		CountDownLatch latch = new CountDownLatch(1);
+
+		riak.on(U("/test/{key}"), (Event ev) -> {
+			String key = ev.getHeaders().get("key");
+			boolean isStore = StoreEvent.class.isInstance(ev);
+
+			// Only count down on store
+			if (isStore) {
+				latch.countDown();
+			}
+		});
+
+		riak.delete(b, "test", null).await(1, TimeUnit.SECONDS);
+
+		assertThat("latch has not counted down", latch.getCount(), is(1L));
+
+		riak.store(b, "test", "Hello World!", null, null, null).await(1, TimeUnit.SECONDS);
+		latch.await(5, TimeUnit.SECONDS);
+
+		assertThat("latch has counted down", latch.getCount(), is(0L));
+	}
+
+	@Test
+	public void canFetchUseCallbacks() throws InterruptedException {
+		CountDownLatch latch = new CountDownLatch(1);
+
+		riak.fetchBucket("test").onSuccess(
+				bucket -> {
+					StoreObject<IRiakObject> storeOp = bucket.store("test", "Hello World!");
+					riak.send(storeOp).onSuccess(
+							obj -> latch.countDown()
+					);
+				}
+		);
+
+		latch.await(5, TimeUnit.SECONDS);
+		assertThat("latch is counted down", latch.getCount(), is(0L));
+	}
+
+	@Test
+	public void canMap() throws InterruptedException {
+		CountDownLatch latch = new CountDownLatch(1);
+
+		Composable<String> cStr = riak.fetchBucket("test").map(
+				bucket -> {
+					latch.countDown();
+					return bucket.getName();
+				}
+		);
+
+		String s = cStr.await(1, TimeUnit.SECONDS);
+		assertThat("value is returned", s, is("test"));
 	}
 
 	@Test

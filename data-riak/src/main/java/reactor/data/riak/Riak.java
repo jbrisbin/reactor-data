@@ -9,6 +9,8 @@ import com.basho.riak.client.operations.DeleteObject;
 import com.basho.riak.client.operations.FetchObject;
 import com.basho.riak.client.operations.RiakOperation;
 import com.basho.riak.client.operations.StoreObject;
+import com.lmax.disruptor.YieldingWaitStrategy;
+import com.lmax.disruptor.dsl.ProducerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.CachingRegistry;
@@ -16,11 +18,9 @@ import reactor.core.Promise;
 import reactor.core.R;
 import reactor.core.Reactor;
 import reactor.data.riak.selector.BucketSelector;
-import reactor.fn.Function;
-import reactor.fn.Registration;
-import reactor.fn.Registry;
-import reactor.fn.Tuple;
+import reactor.fn.*;
 import reactor.fn.dispatch.Dispatcher;
+import reactor.fn.dispatch.RingBufferDispatcher;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -35,13 +35,12 @@ import static reactor.core.Context.threadPoolDispatcher;
  *
  * @author Jon Brisbin
  */
-public class Riak {
+public class Riak extends Reactor {
 
 	private final Logger           log            = LoggerFactory.getLogger(Riak.class);
 	private final Registry<Bucket> bucketRegistry = new CachingRegistry<>(null, null);
 	private final IRiakClient riakClient;
 	private final Reactor     ioReactor;
-	private final Reactor     reactor;
 
 	public Riak() throws RiakException {
 		this(RiakFactory.pbcClient());
@@ -52,20 +51,20 @@ public class Riak {
 	}
 
 	public Riak(IRiakClient riakClient, Dispatcher customDispatcher) {
+		super(customDispatcher);
 		this.riakClient = riakClient;
-		this.reactor = new Reactor(customDispatcher);
-		this.ioReactor = new Reactor(threadPoolDispatcher());
-//		this.ioReactor = new Reactor(new RingBufferDispatcher(
-//				"riak",
-//				1,
-//				1024,
-//				ProducerType.MULTI,
-//				new YieldingWaitStrategy()
-//		));
+//		this.ioReactor = new Reactor(threadPoolDispatcher());
+		this.ioReactor = new Reactor(new RingBufferDispatcher(
+				"riak",
+				1,
+				1024,
+				ProducerType.MULTI,
+				new YieldingWaitStrategy()
+		));
 	}
 
 	public Promise<Void> send(RiakOperation<?>... ops) {
-		Promise<Void> p = new Promise<>(reactor);
+		Promise<Void> p = new Promise<>(this);
 
 		R.schedule(
 				(Void v) -> {
@@ -87,7 +86,7 @@ public class Riak {
 	}
 
 	public <T, O extends RiakOperation<T>> Promise<T> send(O op) {
-		Promise<T> p = new Promise<>(reactor);
+		Promise<T> p = new Promise<>(this);
 
 		R.schedule(
 				(Void v) -> {
@@ -109,7 +108,7 @@ public class Riak {
 	}
 
 	public Promise<Bucket> fetchBucket(String name) {
-		Promise<Bucket> p = new Promise<>(reactor);
+		Promise<Bucket> p = new Promise<>(this);
 
 		Iterator<Registration<? extends Bucket>> buckets = bucketRegistry.select(name).iterator();
 		if (!buckets.hasNext()) {
@@ -142,7 +141,7 @@ public class Riak {
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter,
 															Mutation<T> mutation) {
-		Promise<T> p = new Promise<>(reactor);
+		Promise<T> p = new Promise<>(this);
 
 		R.schedule(
 				(Void v) -> {
@@ -153,7 +152,7 @@ public class Riak {
 					if (null != conflictResolver) {
 						op = op.withResolver(siblings -> {
 							T result = conflictResolver.apply(siblings);
-							reactor.notify("/" + bucket.getName() + "/" + key, new MergeEvent<T>(Tuple.of(siblings, result)));
+							notify("/" + bucket.getName() + "/" + key, new MergeEvent<T>(Tuple.of(siblings, result)));
 							return result;
 						});
 					}
@@ -169,7 +168,7 @@ public class Riak {
 						if (log.isTraceEnabled()) {
 							log.trace("/{}/{} stored: {}", bucket.getName(), key, result);
 						}
-						reactor.notify("/" + bucket.getName() + "/" + key, new StoreEvent<>(result));
+						notify("/" + bucket.getName() + "/" + key, new StoreEvent<>(result));
 
 						p.set(result);
 					} catch (RiakRetryFailedException e) {
@@ -189,7 +188,7 @@ public class Riak {
 															Class<T> asType,
 															Function<Collection<T>, T> conflictResolver,
 															Converter<T> converter) {
-		Promise<T> p = new Promise<>(reactor);
+		Promise<T> p = new Promise<>(this);
 
 		R.schedule(
 				(Void v) -> {
@@ -202,7 +201,7 @@ public class Riak {
 					if (null != conflictResolver) {
 						op = op.withResolver(siblings -> {
 							T result = conflictResolver.apply(siblings);
-							reactor.notify("/" + bucket.getName() + "/" + key, new MergeEvent<T>(Tuple.of(siblings, result)));
+							notify("/" + bucket.getName() + "/" + key, new MergeEvent<T>(Tuple.of(siblings, result)));
 							return result;
 						});
 					}
@@ -235,7 +234,7 @@ public class Riak {
 	public Promise<Void> delete(Bucket bucket,
 															String key,
 															Retrier retrier) {
-		Promise<Void> p = new Promise<>(reactor);
+		Promise<Void> p = new Promise<>(this);
 
 		R.schedule(
 				(Void v) -> {
@@ -248,6 +247,7 @@ public class Riak {
 						if (log.isTraceEnabled()) {
 							log.trace("deleted: /{}/{}", bucket.getName(), key);
 						}
+						notify("/" + bucket.getName() + "/" + key, new DeleteEvent(Tuple.of(bucket, key)));
 						p.set(result);
 					} catch (RiakException e) {
 						p.set(e);
@@ -259,4 +259,5 @@ public class Riak {
 
 		return p;
 	}
+
 }
