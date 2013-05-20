@@ -10,6 +10,8 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Composable;
+import reactor.core.Promise;
+import reactor.fn.Deferred;
 import reactor.fn.Event;
 
 import java.util.concurrent.CountDownLatch;
@@ -25,7 +27,7 @@ import static reactor.Fn.U;
 public class RiakTests {
 
 	static final Logger LOG      = LoggerFactory.getLogger(RiakTests.class);
-	static final long   objCount = 500;
+	static final long   objCount = 1000;
 
 	long start;
 	long end;
@@ -34,9 +36,9 @@ public class RiakTests {
 
 	Riak riak;
 
-	static <T> T await(Composable<T> composable, long seconds) throws InterruptedException {
+	static <T> T await(Deferred<T> d, long seconds) throws InterruptedException {
 		long start = System.currentTimeMillis();
-		T result = composable.await(seconds, TimeUnit.SECONDS);
+		T result = d.await(seconds, TimeUnit.SECONDS);
 		long end = System.currentTimeMillis();
 		assertThat("await hasn't timed out", (end - start), lessThan(seconds * 1000));
 		return result;
@@ -72,11 +74,13 @@ public class RiakTests {
 
 	@Test
 	public void canSendOperationsToRiak() throws InterruptedException {
-		Bucket b = riak.fetchBucket("test").await(1, TimeUnit.SECONDS);
+		Promise<Bucket> p = riak.fetchBucket("test");
+		Bucket b = await(p, 5);
 		assertThat("bucket was retrieved", b, is(notNullValue()));
 
-		IRiakObject iro = riak.send(b.fetch("test")).await(1, TimeUnit.SECONDS);
-		assertThat("object was retrieved", iro, is(notNullValue()));
+		Promise<IRiakObject> pObj = riak.send(b.fetch("test"));
+		await(pObj, 5);
+		assertThat("object was retrieved", pObj.get(), is(notNullValue()));
 	}
 
 	@Test
@@ -163,6 +167,9 @@ public class RiakTests {
 		riak.send(deleteOps).onSuccess(v -> latch.countDown());
 		LOG.info("Done cleaning documents.", objCount);
 
+		// Let Riak catch up
+		Thread.sleep(5000);
+
 		LOG.info("Starting timed store of {} documents...", objCount);
 		startTimer();
 		StoreObject[] storeOps = new StoreObject[(int) objCount];
@@ -175,6 +182,9 @@ public class RiakTests {
 		latch.await(30, TimeUnit.SECONDS);
 
 		endTimer("throughput for wait:");
+
+		// Let Riak catch up
+		Thread.sleep(5000);
 
 		String s = riak.fetch(test, "test" + (objCount - 1), String.class, null, null).await(1, TimeUnit.SECONDS);
 		assertThat("document was stored", s, is("Hello World!"));

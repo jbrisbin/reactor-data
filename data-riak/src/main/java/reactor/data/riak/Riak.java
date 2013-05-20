@@ -13,20 +13,24 @@ import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.dsl.ProducerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.Fn;
 import reactor.core.CachingRegistry;
 import reactor.core.Promise;
 import reactor.core.R;
 import reactor.core.Reactor;
 import reactor.data.riak.selector.BucketSelector;
-import reactor.fn.*;
+import reactor.fn.Function;
+import reactor.fn.Registration;
+import reactor.fn.Registry;
+import reactor.fn.Tuple;
 import reactor.fn.dispatch.Dispatcher;
 import reactor.fn.dispatch.RingBufferDispatcher;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static reactor.core.Context.rootDispatcher;
-import static reactor.core.Context.threadPoolDispatcher;
 
 /**
  * Instances of this class manage the execution of {@link RiakOperation RiakOperations} so that the user doesn't
@@ -51,10 +55,7 @@ public class Riak extends Reactor {
 	}
 
 	public Riak(IRiakClient riakClient, Dispatcher customDispatcher) {
-		super(customDispatcher);
-		this.riakClient = riakClient;
-//		this.ioReactor = new Reactor(threadPoolDispatcher());
-		this.ioReactor = new Reactor(new RingBufferDispatcher(
+		this(riakClient, customDispatcher, new RingBufferDispatcher(
 				"riak",
 				1,
 				1024,
@@ -63,24 +64,33 @@ public class Riak extends Reactor {
 		));
 	}
 
+	public Riak(IRiakClient riakClient, Dispatcher customDispatcher, Dispatcher ioDispatcher) {
+		super(customDispatcher);
+		this.riakClient = riakClient;
+		this.ioReactor = new Reactor(ioDispatcher);
+	}
+
 	public Promise<Void> send(RiakOperation<?>... ops) {
 		Promise<Void> p = new Promise<>(this);
 
-		R.schedule(
-				(Void v) -> {
-					for (RiakOperation<?> op : ops) {
+		AtomicLong counter = new AtomicLong(ops.length);
+		for (RiakOperation<?> op : ops) {
+			R.schedule(
+					(Void v) -> {
 						try {
 							op.execute();
 						} catch (RiakException e) {
-							p.set(e);
-							break;
+							notify(Fn.T(e.getClass()), Fn.event(e));
+						} finally {
+							if (counter.decrementAndGet() == 0) {
+								p.set((Void) null);
+							}
 						}
-					}
-					p.set((Void) null);
-				},
-				null,
-				ioReactor
-		);
+					},
+					null,
+					ioReactor
+			);
+		}
 
 		return p;
 	}
